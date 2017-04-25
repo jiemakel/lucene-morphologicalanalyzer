@@ -39,12 +39,14 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
   
   private var analysisPartIterator: Iterator[String] = Iterator.empty
 
-  private var offset = 0
+  private var startOffset = 0
+  private var endOffset = 0
   private var analysisIndex = 0
   private var weight = 0.0
   private var analysisPartIndex = 0
 
   final override def incrementToken(): Boolean = {
+    clearAttributes()
     val analysisToken = if (!analysisPartIterator.hasNext) { // end of wordparts
       if (!analysisIterator.hasNext) { // end of analysis
         if (!analysesIterator.hasNext) { // end of analyses
@@ -52,12 +54,12 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
           val n = wordsIterator.next // next word
           analysesIterator = n._3.iterator
           posAttr.setPositionIncrement(1)
-          offset = n._1
+          startOffset = n._1
           weight = 1.0
           analysisIndex = 0
           analysisPartIndex = 0
           val word = n._2
-          offAttr.setOffset(offset, offset + word.length - 2) // W=[word]
+          endOffset = startOffset + word.length - 2 // W=[word]
           word
         } else {
           val n2 = analysesIterator.next // next analysis
@@ -70,12 +72,14 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
           analysisPartIterator.next
         }
       } else {
+        posAttr.setPositionIncrement(0)
         analysisPartIterator = analysisIterator.next.iterator // next analysis part
         analysisIndex += 1
         analysisPartIndex = 0
         analysisPartIterator.next
       }
     } else { // next analysis part
+      posAttr.setPositionIncrement(0)
       analysisPartIndex += 1
       analysisPartIterator.next
     }
@@ -83,8 +87,8 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
     NumericUtils.longToSortableBytes(NumericUtils.doubleToSortableLong(weight), payload, 0)
     NumericUtils.intToSortableBytes(analysisIndex, payload, 8)
     NumericUtils.intToSortableBytes(analysisPartIndex, payload, 12)
+    offAttr.setOffset(startOffset, endOffset)
     plAttr.setPayload(new BytesRef(payload))
-    termAttr.setEmpty()
     termAttr.append(analysisToken)
     return true
   }
@@ -98,14 +102,21 @@ class FinnishMorphologicalTokenizer(inflections: java.util.List[String] = Collec
   
   val tokenStream = new MorphologicalAnalysisTokenStream() {
     override def reset() = {
-      reset2()
+      FinnishMorphologicalTokenizer.this.reset()
       super.reset()
     }
+    override def end() = {
+      FinnishMorphologicalTokenizer.this.end()
+      super.end()
+    }
+    override def close() = {
+      FinnishMorphologicalTokenizer.this.close()
+      super.close()
+    }
   }
-  override def reset() = reset2()
   
   val arr = new Array[Char](8 * 1024)
-  def reset2(): Unit = {
+  override def reset(): Unit = {
     super.reset()
     val buffer = new StringBuilder();
     var numCharsRead: Int = input.read(arr, 0, arr.length)
