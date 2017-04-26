@@ -20,12 +20,12 @@ import java.util.Collection
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] = null) extends TokenStream {
+class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] = null, payloads: Boolean = true) extends TokenStream {
   
   private val termAttr: CharTermAttribute = addAttribute(classOf[CharTermAttribute])
   private val posAttr: PositionIncrementAttribute = addAttribute(classOf[PositionIncrementAttribute])
   private val offAttr: OffsetAttribute = addAttribute(classOf[OffsetAttribute])
-  private val plAttr: PayloadAttribute = addAttribute(classOf[PayloadAttribute])
+  private val plAttr: PayloadAttribute = if (payloads) addAttribute(classOf[PayloadAttribute]) else null
   
   private var wordsIterator: Iterator[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] = null // offset+word->analyses | weight->analysisParts | part
 
@@ -83,12 +83,14 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
       analysisPartIndex += 1
       analysisPartIterator.next
     }
-    val payload = new Array[Byte](16)
-    NumericUtils.longToSortableBytes(NumericUtils.doubleToSortableLong(weight), payload, 0)
-    NumericUtils.intToSortableBytes(analysisIndex, payload, 8)
-    NumericUtils.intToSortableBytes(analysisPartIndex, payload, 12)
-    offAttr.setOffset(startOffset, endOffset)
-    plAttr.setPayload(new BytesRef(payload))
+    if (payloads) {
+      val payload = new Array[Byte](16)
+      NumericUtils.longToSortableBytes(NumericUtils.doubleToSortableLong(weight), payload, 0)
+      NumericUtils.intToSortableBytes(analysisIndex, payload, 8)
+      NumericUtils.intToSortableBytes(analysisPartIndex, payload, 12)
+      offAttr.setOffset(startOffset, endOffset)
+      plAttr.setPayload(new BytesRef(payload))
+    }
     termAttr.append(analysisToken)
     return true
   }
