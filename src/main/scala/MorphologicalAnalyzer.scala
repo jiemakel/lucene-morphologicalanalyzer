@@ -19,21 +19,23 @@ import java.util.Collections
 import java.util.Collection
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import org.apache.lucene.store.ByteArrayDataOutput
+import org.apache.lucene.util.SmallFloat
 
-class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] = null, payloads: Boolean = true) extends TokenStream {
+class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] = null, payloads: Boolean = false) extends TokenStream {
   
   private val termAttr: CharTermAttribute = addAttribute(classOf[CharTermAttribute])
   private val posAttr: PositionIncrementAttribute = addAttribute(classOf[PositionIncrementAttribute])
   private val offAttr: OffsetAttribute = addAttribute(classOf[OffsetAttribute])
   private val plAttr: PayloadAttribute = if (payloads) addAttribute(classOf[PayloadAttribute]) else null
   
-  private var wordsIterator: Iterator[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] = null // offset+word->analyses | weight->analysisParts | part
+  private var wordsIterator: Iterator[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] = null // offset+word->analyses | weight->analysisParts | part
 
   override def reset(): Unit = {
     wordsIterator = tokens.iterator
   }
   
-  private var analysesIterator: Iterator[(Double,Iterable[Iterable[String]])] = Iterator.empty
+  private var analysesIterator: Iterator[(Float,Iterable[Iterable[String]])] = Iterator.empty
   
   private var analysisIterator: Iterator[Iterable[String]] = Iterator.empty
   
@@ -42,7 +44,7 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
   private var startOffset = 0
   private var endOffset = 0
   private var analysisIndex = 0
-  private var weight = 0.0
+  private var weight = 0.0f
   private var analysisPartIndex = 0
 
   final override def incrementToken(): Boolean = {
@@ -55,7 +57,7 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
           analysesIterator = n._3.iterator
           posAttr.setPositionIncrement(1)
           startOffset = n._1
-          weight = 1.0
+          weight = 1.0f
           analysisIndex = 0
           analysisPartIndex = 0
           val word = n._2
@@ -83,36 +85,37 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
       analysisPartIndex += 1
       analysisPartIterator.next
     }
+    offAttr.setOffset(startOffset, endOffset)
     if (payloads) {
-      val payload = new Array[Byte](16)
-      NumericUtils.longToSortableBytes(NumericUtils.doubleToSortableLong(weight), payload, 0)
-      NumericUtils.intToSortableBytes(analysisIndex, payload, 8)
-      NumericUtils.intToSortableBytes(analysisPartIndex, payload, 12)
-      offAttr.setOffset(startOffset, endOffset)
-      plAttr.setPayload(new BytesRef(payload))
+      val payload = new Array[Byte](1 + 5 + 5)
+      val payloadOutput = new ByteArrayDataOutput(payload)
+      payloadOutput.writeByte(SmallFloat.floatToByte52(weight))
+      payloadOutput.writeVInt(analysisIndex)
+      payloadOutput.writeVInt(analysisPartIndex)
+      plAttr.setPayload(new BytesRef(payload,0, payloadOutput.getPosition))
     }
     termAttr.append(analysisToken)
     return true
   }
 }
 
-class FinnishMorphologicalTokenizer(inflections: java.util.List[String] = Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], segmentBaseform: Boolean = false, guessUnknown: Boolean = true, segmentUnknown: Boolean = false, maxEditDistance: Int = 0, depth: Int = 1) extends Tokenizer {
+class MorphologicalTokenizer(locale: Locale, inflections: java.util.List[String] = Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], segmentBaseform: Boolean = false, guessUnknown: Boolean = true, segmentUnknown: Boolean = false, maxEditDistance: Int = 0, depth: Int = 1) extends Tokenizer {
   
-  import FinnishMorphologicalAnalyzer._
+  import MorphologicalAnalyzer._
   
   val analyzer = new CombinedLexicalAnalysisService()
   
   val tokenStream = new MorphologicalAnalysisTokenStream() {
     override def reset() = {
-      FinnishMorphologicalTokenizer.this.reset()
+      MorphologicalTokenizer.this.reset()
       super.reset()
     }
     override def end() = {
-      FinnishMorphologicalTokenizer.this.end()
+      MorphologicalTokenizer.this.end()
       super.end()
     }
     override def close() = {
-      FinnishMorphologicalTokenizer.this.close()
+      MorphologicalTokenizer.this.close()
       super.close()
     }
   }
@@ -128,17 +131,17 @@ class FinnishMorphologicalTokenizer(inflections: java.util.List[String] = Collec
     }
     input.close()
     val string = buffer.toString
-    tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, fiLocale, inflections, segmentBaseform, guessUnknown, segmentUnknown, maxEditDistance, depth))
+    tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, locale, inflections, segmentBaseform, guessUnknown, segmentUnknown, maxEditDistance, depth))
   }
   
   final override def incrementToken(): Boolean = throw new UnsupportedOperationException("Can't increment")
   val fiLocale = new Locale("fi")
 }
 
-class FinnishMorphologicalAnalyzer extends Analyzer {
+class MorphologicalAnalyzerlocale(locale: Locale, inflections: java.util.List[String] = Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], segmentBaseform: Boolean = false, guessUnknown: Boolean = true, segmentUnknown: Boolean = false, maxEditDistance: Int = 0, depth: Int = 1) extends Analyzer {
   
   override def createComponents(fieldName: String): TokenStreamComponents = {
-    val tokenizer = new FinnishMorphologicalTokenizer()
+    val tokenizer = new MorphologicalTokenizer(locale, inflections, segmentBaseform, guessUnknown, segmentUnknown, maxEditDistance, depth)
     return new TokenStreamComponents(tokenizer, tokenizer.tokenStream)
   }
   
@@ -150,7 +153,7 @@ case class WordToAnalysis(
 )
 
 case class Analysis(
-  weight: Double,
+  weight: Float,
   wordParts: List[WordPart],
   globalTags: List[Map[String,List[String]]]
 )
@@ -160,7 +163,7 @@ case class WordPart(
   tags: List[Map[String,List[String]]]
 )
 
-object FinnishMorphologicalAnalyzer {
+object MorphologicalAnalyzer {
   def filterGlobalTag(tag: String): Boolean = tag match {
     case "WHITESPACE" => true
     case "POS_MATCH" => true
@@ -177,14 +180,14 @@ object FinnishMorphologicalAnalyzer {
     case _ => false
   }
   
-  def scalaAnalysisToTokenStream(analysis: List[WordToAnalysis], filterGlobalTag: (String) => Boolean = filterGlobalTag, filterTag: (String) => Boolean = filterTag): Iterable[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] = {
-    val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] 
+  def scalaAnalysisToTokenStream(analysis: List[WordToAnalysis], filterGlobalTag: (String) => Boolean = filterGlobalTag, filterTag: (String) => Boolean = filterTag): Iterable[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] = {
+    val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] 
     var offset = 0
     for (word <- analysis)
       if (word.analysis(0).globalTags.exists(_.contains("WHITESPACE")))
         offset += word.word.length
       else {
-        val analyses = new ArrayBuffer[(Double,Iterable[Iterable[String]])]
+        val analyses = new ArrayBuffer[(Float,Iterable[Iterable[String]])]
         val analysisParts = new ArrayBuffer[Iterable[String]]
         for (analysis <- word.analysis) {
           val prefix = if (analysis.globalTags.exists(_.contains("BEST_MATCH"))) "B" else "O"
@@ -208,14 +211,14 @@ object FinnishMorphologicalAnalyzer {
     wordsToAnalysis
   }
   
-  def analysisToTokenStream(analysis: java.util.List[WordToResults], filterGlobalTag: (String) => Boolean = filterGlobalTag, filterTag: (String) => Boolean = filterTag): Iterable[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] = {
-    val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[(Double,Iterable[Iterable[String]])])] 
+  def analysisToTokenStream(analysis: java.util.List[WordToResults], filterGlobalTag: (String) => Boolean = filterGlobalTag, filterTag: (String) => Boolean = filterTag): Iterable[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] = {
+    val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] 
     var offset = 0
     for (word <- analysis.asScala)
       if (word.getAnalysis.get(0).getGlobalTags().containsKey("WHITESPACE"))
         offset += word.getWord.length
       else {
-        val analyses = new ArrayBuffer[(Double,Iterable[Iterable[String]])]
+        val analyses = new ArrayBuffer[(Float,Iterable[Iterable[String]])]
         val analysisParts = new ArrayBuffer[Iterable[String]]
         for (analysis <- word.getAnalysis.asScala) {
           val prefix = if (analysis.getGlobalTags.containsKey("BEST_MATCH")) "B" else "O"

@@ -1,4 +1,4 @@
-name := """lucene-finnishmorphologicalanalyzer"""
+name := """lucene-morphologicalanalyzer"""
 
 organization := "fi.seco"
 
