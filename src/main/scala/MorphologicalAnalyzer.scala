@@ -138,7 +138,7 @@ class MorphologicalTokenizer(locale: Locale, inflections: java.util.List[String]
   val fiLocale = new Locale("fi")
 }
 
-class MorphologicalAnalyzerlocale(locale: Locale, inflections: java.util.List[String] = Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], segmentBaseform: Boolean = false, guessUnknown: Boolean = true, segmentUnknown: Boolean = false, maxEditDistance: Int = 0, depth: Int = 1) extends Analyzer {
+class MorphologicalAnalyzer(locale: Locale, inflections: java.util.List[String] = Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], segmentBaseform: Boolean = false, guessUnknown: Boolean = true, segmentUnknown: Boolean = false, maxEditDistance: Int = 0, depth: Int = 1) extends Analyzer {
   
   override def createComponents(fieldName: String): TokenStreamComponents = {
     val tokenizer = new MorphologicalTokenizer(locale, inflections, segmentBaseform, guessUnknown, segmentUnknown, maxEditDistance, depth)
