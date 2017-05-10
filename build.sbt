@@ -14,7 +14,7 @@ resolvers ++= Seq(
 
 libraryDependencies ++= Seq(
   "org.apache.lucene" % "lucene-core" % "6.5.1",
-  "fi.seco" % "lexicalanalysis" % "1.5.7"
+  "fi.seco" % "lexicalanalysis" % "1.5.8"
 )
 
 publishTo := {
