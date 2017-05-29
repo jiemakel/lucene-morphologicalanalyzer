@@ -2,7 +2,7 @@ name := """lucene-morphologicalanalyzer"""
 
 organization := "fi.seco"
 
-version := "1.1.1"
+version := "1.1.2"
 
 scalaVersion := "2.12.1"
 
@@ -14,7 +14,7 @@ resolvers ++= Seq(
 
 libraryDependencies ++= Seq(
   "org.apache.lucene" % "lucene-core" % "6.5.1",
-  "fi.seco" % "lexicalanalysis" % "1.5.8"
+  "fi.seco" % "lexicalanalysis" % "1.5.9"
 )
 
 publishTo := {
