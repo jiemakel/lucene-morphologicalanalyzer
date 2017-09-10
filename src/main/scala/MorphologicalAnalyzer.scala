@@ -135,7 +135,6 @@ class MorphologicalTokenizer(locale: Locale, inflections: java.util.List[String]
   }
   
   final override def incrementToken(): Boolean = throw new UnsupportedOperationException("Can't increment")
-  val fiLocale = new Locale("fi")
 }
 
 class MorphologicalAnalyzer(locale: Locale, inflections: java.util.List[String] = Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], segmentBaseform: Boolean = false, guessUnknown: Boolean = true, segmentUnknown: Boolean = false, maxEditDistance: Int = 0, depth: Int = 1) extends Analyzer {
