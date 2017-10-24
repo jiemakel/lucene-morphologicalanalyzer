@@ -89,7 +89,7 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
     if (payloads) {
       val payload = new Array[Byte](1 + 5 + 5)
       val payloadOutput = new ByteArrayDataOutput(payload)
-      payloadOutput.writeByte(SmallFloat.floatToByte52(weight))
+      payloadOutput.writeByte(SmallFloat.floatToByte(weight,5,2))
       payloadOutput.writeVInt(analysisIndex)
       payloadOutput.writeVInt(analysisPartIndex)
       plAttr.setPayload(new BytesRef(payload,0, payloadOutput.getPosition))
