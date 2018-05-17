@@ -9,6 +9,7 @@ import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttr
 import org.apache.lucene.analysis.{Analyzer, TokenStream, Tokenizer}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 class LemmaAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[String])] = null, var originalWords: Boolean = true) extends TokenStream {
@@ -49,7 +50,7 @@ class LemmaAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[Strin
   }
 }
 
-class LemmaTokenizer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, guessUnknown: Boolean = true, maxEditDistance: Int = 0, depth: Int = 1) extends Tokenizer {
+class LemmaTokenizer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, guessUnknown: Boolean = true, maxEditDistance: Int = 0, depth: Int = 1, nonWords: Boolean = false, unique: Boolean = true) extends Tokenizer {
   
   import LemmaAnalyzer._
   import MorphologicalAnalyzer.analyzer
@@ -80,16 +81,16 @@ class LemmaTokenizer(locale: Locale, originalWords: Boolean = true, allLemmas: B
     }
     input.close()
     tokenStream.originalWords = originalWords
-    tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, locale, Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], false, guessUnknown, false, maxEditDistance, depth), allLemmas)
+    tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, locale, Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], false, guessUnknown, false, maxEditDistance, depth), allLemmas, nonWords, unique)
   }
   
   final override def incrementToken(): Boolean = throw new UnsupportedOperationException("Can't increment")
 }
 
-class LemmaAnalyzer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, guessUnknown: Boolean = true, maxEditDistance: Int = 0, depth: Int = 1, lowercase: Boolean = true) extends Analyzer {
+class LemmaAnalyzer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, guessUnknown: Boolean = true, maxEditDistance: Int = 0, depth: Int = 1, nonWords: Boolean = false, lowercase: Boolean = true, unique: Boolean = true) extends Analyzer {
 
   override def createComponents(fieldName: String): TokenStreamComponents = {
-    val tokenizer = new LemmaTokenizer(locale, originalWords, allLemmas, guessUnknown, maxEditDistance, depth)
+    val tokenizer = new LemmaTokenizer(locale, originalWords, allLemmas, guessUnknown, maxEditDistance, depth, nonWords, unique)
     var tokenStream: TokenStream = tokenizer.tokenStream
     if (lowercase) tokenStream = new LowerCaseFilter(tokenStream)
     new TokenStreamComponents(tokenizer, tokenStream)
@@ -99,19 +100,21 @@ class LemmaAnalyzer(locale: Locale, originalWords: Boolean = true, allLemmas: Bo
 
 object LemmaAnalyzer {
   
-  def analysisToTokenStream(analysis: java.util.List[WordToResults], allLemmas: Boolean = false): Iterable[(Int, String, Iterable[String])] = {
+  def analysisToTokenStream(analysis: java.util.List[WordToResults], allLemmas: Boolean = false, nonWords: Boolean = false, unique: Boolean = true): Iterable[(Int, String, Iterable[String])] = {
     val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[String])] 
     var offset = 0
     for (word <- analysis.asScala)
-      if (word.getAnalysis.get(0).getGlobalTags.containsKey("WHITESPACE"))
+      if (word.getAnalysis.get(0).getGlobalTags.containsKey("WHITESPACE") || (!nonWords && word.getAnalysis.asScala.exists(_.getParts.asScala.exists(wp => Option(wp.getTags.get("UPOS")).exists(_.contains("PUNCT"))))))
         offset += word.getWord.length
       else {
         val analyses = new ArrayBuffer[String]
+        val seen = if (unique) new mutable.HashSet[String] else null
         for (analysis <- word.getAnalysis.asScala) if (allLemmas || analysis.getGlobalTags.containsKey("BEST_MATCH")) {
           var lemma = ""
           for (wordPart <- analysis.getParts.asScala)
             lemma += wordPart.getLemma
-          analyses += lemma
+          if (!unique || seen.add(lemma))
+            analyses += lemma
         }
         wordsToAnalysis += ((offset, word.getWord, analyses)) 
         offset += word.getWord.length

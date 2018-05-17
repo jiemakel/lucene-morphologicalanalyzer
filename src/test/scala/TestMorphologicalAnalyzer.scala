@@ -1,11 +1,9 @@
-import org.junit.Test
-import org.junit.Assert._
-import org.hamcrest.CoreMatchers._
-import fi.seco.lucene.MorphologicalAnalyzer
 import java.util.Locale
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute
-import org.apache.lucene.analysis.tokenattributes.OffsetAttribute
+
+import fi.seco.lucene.MorphologicalAnalyzer
+import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttribute, PositionIncrementAttribute}
+import org.junit.Assert._
+import org.junit.Test
 
 
 class TestMorphologicalAnalyzer {
@@ -27,7 +25,7 @@ class TestMorphologicalAnalyzer {
     assertEquals(0,off.startOffset)
     assertEquals(7,off.endOffset)
     assertEquals(0,pos.getPositionIncrement)
-    assertEquals("BFIRST_IN_SENTENCE=TRUE",term.toString)
+    assertEquals("BL=juosta",term.toString)
   }
   
 }

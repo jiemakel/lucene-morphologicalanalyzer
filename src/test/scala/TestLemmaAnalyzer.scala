@@ -27,7 +27,7 @@ class TestLemmaAnalyzer {
     assertEquals(0,pos.getPositionIncrement)
     assertEquals("juosta",term.toString)
     a = new LemmaAnalyzer(new Locale("fi"), false)
-    t = a.tokenStream("test", "juoksin läpi kaupungin")
+    t = a.tokenStream("test", "juoksin, läpi kaupungin")
     term = t.getAttribute(classOf[CharTermAttribute])
     pos = t.getAttribute(classOf[PositionIncrementAttribute])
     off = t.getAttribute(classOf[OffsetAttribute])
@@ -36,7 +36,12 @@ class TestLemmaAnalyzer {
     assertEquals(0,off.startOffset)
     assertEquals(7,off.endOffset)
     assertEquals(1,pos.getPositionIncrement)
-    assertEquals("juosta",term.toString)    
+    assertEquals("juosta",term.toString)
+    while (off.startOffset() == 0) assertTrue(t.incrementToken())
+    assertEquals(9,off.startOffset)
+    assertEquals(13,off.endOffset)
+    assertEquals(1,pos.getPositionIncrement)
+    assertEquals("läpi",term.toString)
   }
   
 }
