@@ -81,7 +81,7 @@ class LemmaTokenizer(locale: Locale, originalWords: Boolean = true, allLemmas: B
     }
     input.close()
     tokenStream.originalWords = originalWords
-    tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, locale, Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], false, guessUnknown, false, maxEditDistance, depth), allLemmas, nonWords, unique)
+    tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, locale, Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], false, guessUnknown, false, maxEditDistance, depth), allLemmas, nonWords, unique, originalWords)
   }
   
   final override def incrementToken(): Boolean = throw new UnsupportedOperationException("Can't increment")
@@ -100,7 +100,7 @@ class LemmaAnalyzer(locale: Locale, originalWords: Boolean = true, allLemmas: Bo
 
 object LemmaAnalyzer {
   
-  def analysisToTokenStream(analysis: java.util.List[WordToResults], allLemmas: Boolean = false, nonWords: Boolean = false, unique: Boolean = true): Iterable[(Int, String, Iterable[String])] = {
+  def analysisToTokenStream(analysis: java.util.List[WordToResults], allLemmas: Boolean, nonWords: Boolean, unique: Boolean, originalWords: Boolean): Iterable[(Int, String, Iterable[String])] = {
     val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[String])] 
     var offset = 0
     for (word <- analysis.asScala)
@@ -109,6 +109,7 @@ object LemmaAnalyzer {
       else {
         val analyses = new ArrayBuffer[String]
         val seen = if (unique) new mutable.HashSet[String] else null
+        if (unique && originalWords) seen.add(word.getWord)
         for (analysis <- word.getAnalysis.asScala) if (allLemmas || analysis.getGlobalTags.containsKey("BEST_MATCH")) {
           var lemma = ""
           for (wordPart <- analysis.getParts.asScala)
