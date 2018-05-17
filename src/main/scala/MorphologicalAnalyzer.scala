@@ -1,26 +1,17 @@
 package fi.seco.lucene
 
-import org.apache.lucene.analysis.TokenStream
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute
-import org.apache.lucene.analysis.tokenattributes.OffsetAttribute
-import org.apache.lucene.analysis.tokenattributes.PayloadAttribute
-import org.apache.lucene.util.BytesRef
-import org.apache.lucene.util.NumericUtils
-import org.apache.lucene.analysis.Analyzer
-import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
-import fi.seco.lexical.hfst.HFSTLexicalAnalysisService.WordToResults
-import org.apache.lucene.analysis.Tokenizer
-import org.apache.lucene.util.IOUtils
-import org.apache.lucene.analysis.CharacterUtils
+import java.util.{Collections, Locale}
+
 import fi.seco.lexical.combined.CombinedLexicalAnalysisService
-import java.util.Locale
-import java.util.Collections
-import java.util.Collection
+import fi.seco.lexical.hfst.HFSTLexicalAnalysisService.WordToResults
+import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
+import org.apache.lucene.analysis.{Analyzer, TokenStream, Tokenizer}
+import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttribute, PayloadAttribute, PositionIncrementAttribute}
+import org.apache.lucene.store.ByteArrayDataOutput
+import org.apache.lucene.util.{BytesRef, SmallFloat}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import org.apache.lucene.store.ByteArrayDataOutput
-import org.apache.lucene.util.SmallFloat
 
 class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] = null, payloads: Boolean = false) extends TokenStream {
   
@@ -29,7 +20,7 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
   private val offAttr: OffsetAttribute = addAttribute(classOf[OffsetAttribute])
   private val plAttr: PayloadAttribute = if (payloads) addAttribute(classOf[PayloadAttribute]) else null
   
-  private var wordsIterator: Iterator[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] = null // offset+word->analyses | weight->analysisParts | part
+  private var wordsIterator: Iterator[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] = _ // offset+word->analyses | weight->analysisParts | part
 
   override def reset(): Unit = {
     wordsIterator = tokens.iterator
@@ -95,7 +86,7 @@ class MorphologicalAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterab
       plAttr.setPayload(new BytesRef(payload,0, payloadOutput.getPosition))
     }
     termAttr.append(analysisToken)
-    return true
+    true
   }
 }
 
@@ -106,15 +97,15 @@ class MorphologicalTokenizer(locale: Locale, inflections: java.util.List[String]
   val analyzer = new CombinedLexicalAnalysisService()
   
   val tokenStream = new MorphologicalAnalysisTokenStream() {
-    override def reset() = {
+    override def reset(): Unit = {
       MorphologicalTokenizer.this.reset()
       super.reset()
     }
-    override def end() = {
+    override def end(): Unit = {
       MorphologicalTokenizer.this.end()
       super.end()
     }
-    override def close() = {
+    override def close(): Unit = {
       MorphologicalTokenizer.this.close()
       super.close()
     }
@@ -123,14 +114,13 @@ class MorphologicalTokenizer(locale: Locale, inflections: java.util.List[String]
   val arr = new Array[Char](8 * 1024)
   override def reset(): Unit = {
     super.reset()
-    val buffer = new StringBuilder();
+    val buffer = new StringBuilder()
     var numCharsRead: Int = input.read(arr, 0, arr.length)
     while (numCharsRead != -1) {
       buffer.appendAll(arr, 0, numCharsRead)
       numCharsRead = input.read(arr, 0, arr.length)
     }
     input.close()
-    val string = buffer.toString
     tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, locale, inflections, segmentBaseform, guessUnknown, segmentUnknown, maxEditDistance, depth))
   }
   
@@ -141,7 +131,7 @@ class MorphologicalAnalyzer(locale: Locale, inflections: java.util.List[String] 
   
   override def createComponents(fieldName: String): TokenStreamComponents = {
     val tokenizer = new MorphologicalTokenizer(locale, inflections, segmentBaseform, guessUnknown, segmentUnknown, maxEditDistance, depth)
-    return new TokenStreamComponents(tokenizer, tokenizer.tokenStream)
+    new TokenStreamComponents(tokenizer, tokenizer.tokenStream)
   }
   
 }
@@ -183,11 +173,10 @@ object MorphologicalAnalyzer {
     val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] 
     var offset = 0
     for (word <- analysis)
-      if (word.analysis(0).globalTags.exists(_.contains("WHITESPACE")))
+      if (word.analysis.head.globalTags.exists(_.contains("WHITESPACE")))
         offset += word.word.length
       else {
         val analyses = new ArrayBuffer[(Float,Iterable[Iterable[String]])]
-        val analysisParts = new ArrayBuffer[Iterable[String]]
         for (analysis <- word.analysis) {
           val prefix = if (analysis.globalTags.exists(_.contains("BEST_MATCH"))) "B" else "O"
           val analysis2 = new ArrayBuffer[Iterable[String]]
@@ -198,7 +187,7 @@ object MorphologicalAnalyzer {
           for (wordPart <- analysis.wordParts) {
             val partAnalysis = new ArrayBuffer[String]
             for (tags <- wordPart.tags;(tag, tagValues) <- tags; if !filterTag(tag); tagValue <- tagValues) partAnalysis += prefix + tag+"="+tagValue
-            if (!partAnalysis.isEmpty) analysis2 += partAnalysis
+            if (partAnalysis.nonEmpty) analysis2 += partAnalysis
             lemma += wordPart.lemma
           }
           ganalysis += prefix + "L="+lemma
@@ -214,11 +203,10 @@ object MorphologicalAnalyzer {
     val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[(Float,Iterable[Iterable[String]])])] 
     var offset = 0
     for (word <- analysis.asScala)
-      if (word.getAnalysis.get(0).getGlobalTags().containsKey("WHITESPACE"))
+      if (word.getAnalysis.get(0).getGlobalTags.containsKey("WHITESPACE"))
         offset += word.getWord.length
       else {
         val analyses = new ArrayBuffer[(Float,Iterable[Iterable[String]])]
-        val analysisParts = new ArrayBuffer[Iterable[String]]
         for (analysis <- word.getAnalysis.asScala) {
           val prefix = if (analysis.getGlobalTags.containsKey("BEST_MATCH")) "B" else "O"
           val analysis2 = new ArrayBuffer[Iterable[String]]
@@ -229,7 +217,7 @@ object MorphologicalAnalyzer {
           for (wordPart <- analysis.getParts.asScala) {
             val partAnalysis = new ArrayBuffer[String]
             for ((tag, tagValues) <- wordPart.getTags.asScala; if !filterTag(tag); tagValue <- tagValues.asScala) partAnalysis += prefix + tag+"="+tagValue
-            if (!partAnalysis.isEmpty) analysis2 += partAnalysis
+            if (partAnalysis.nonEmpty) analysis2 += partAnalysis
             lemma += wordPart.getLemma
           }
           ganalysis += prefix + "L="+lemma

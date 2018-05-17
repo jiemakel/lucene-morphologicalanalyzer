@@ -1,26 +1,16 @@
 package fi.seco.lucene
 
-import org.apache.lucene.analysis.TokenStream
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute
-import org.apache.lucene.analysis.tokenattributes.OffsetAttribute
-import org.apache.lucene.analysis.tokenattributes.PayloadAttribute
-import org.apache.lucene.util.BytesRef
-import org.apache.lucene.util.NumericUtils
-import org.apache.lucene.analysis.Analyzer
-import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
-import fi.seco.lexical.hfst.HFSTLexicalAnalysisService.WordToResults
-import org.apache.lucene.analysis.Tokenizer
-import org.apache.lucene.util.IOUtils
-import org.apache.lucene.analysis.CharacterUtils
+import java.util.{Collections, Locale}
+
 import fi.seco.lexical.combined.CombinedLexicalAnalysisService
-import java.util.Locale
-import java.util.Collections
-import java.util.Collection
+import fi.seco.lexical.hfst.HFSTLexicalAnalysisService.WordToResults
+import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
+import org.apache.lucene.analysis.{Analyzer, TokenStream, Tokenizer}
+import org.apache.lucene.analysis.core.LowerCaseFilter
+import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttribute, PositionIncrementAttribute}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import org.apache.lucene.store.ByteArrayDataOutput
-import org.apache.lucene.util.SmallFloat
 
 class LemmaAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[String])] = null, var originalWords: Boolean = true) extends TokenStream {
   
@@ -28,16 +18,14 @@ class LemmaAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[Strin
   private val posAttr: PositionIncrementAttribute = addAttribute(classOf[PositionIncrementAttribute])
   private val offAttr: OffsetAttribute = addAttribute(classOf[OffsetAttribute])
   
-  private var wordsIterator: Iterator[(Int, String, Iterable[String])] = null
+  private var wordsIterator: Iterator[(Int, String, Iterable[String])] = _
 
   override def reset(): Unit = {
     wordsIterator = tokens.iterator
   }
   
   private var analysesIterator: Iterator[String] = Iterator.empty
-  
-  private var analysisIterator: Iterator[Iterable[String]] = Iterator.empty
-  
+
   private var startOffset = 0
   private var endOffset = 0
 
@@ -58,26 +46,26 @@ class LemmaAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[Strin
     }
     offAttr.setOffset(startOffset, endOffset)
     termAttr.append(analysisToken)
-    return true
+    true
   }
 }
 
-class LemmaTokenizer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, segmentBaseform: Boolean = false, guessUnknown: Boolean = true, segmentUnknown: Boolean = false, maxEditDistance: Int = 0, depth: Int = 1) extends Tokenizer {
+class LemmaTokenizer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, guessUnknown: Boolean = true, maxEditDistance: Int = 0, depth: Int = 1) extends Tokenizer {
   
   import LemmaAnalyzer._
   
   val analyzer = new CombinedLexicalAnalysisService()
   
   val tokenStream = new LemmaAnalysisTokenStream() {
-    override def reset() = {
+    override def reset(): Unit = {
       LemmaTokenizer.this.reset()
       super.reset()
     }
-    override def end() = {
+    override def end(): Unit = {
       LemmaTokenizer.this.end()
       super.end()
     }
-    override def close() = {
+    override def close(): Unit = {
       LemmaTokenizer.this.close()
       super.close()
     }
@@ -86,26 +74,25 @@ class LemmaTokenizer(locale: Locale, originalWords: Boolean = true, allLemmas: B
   val arr = new Array[Char](8 * 1024)
   override def reset(): Unit = {
     super.reset()
-    val buffer = new StringBuilder();
+    val buffer = new StringBuilder()
     var numCharsRead: Int = input.read(arr, 0, arr.length)
     while (numCharsRead != -1) {
       buffer.appendAll(arr, 0, numCharsRead)
       numCharsRead = input.read(arr, 0, arr.length)
     }
     input.close()
-    val string = buffer.toString
     tokenStream.originalWords = originalWords
-    tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, locale, Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], segmentBaseform, guessUnknown, segmentUnknown, maxEditDistance, depth), allLemmas)
+    tokenStream.tokens = analysisToTokenStream(analyzer.analyze(buffer.toString, locale, Collections.EMPTY_LIST.asInstanceOf[java.util.List[String]], false, guessUnknown, false, maxEditDistance, depth), allLemmas)
   }
   
   final override def incrementToken(): Boolean = throw new UnsupportedOperationException("Can't increment")
 }
 
-class LemmaAnalyzer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, segmentBaseform: Boolean = false, guessUnknown: Boolean = true, segmentUnknown: Boolean = false, maxEditDistance: Int = 0, depth: Int = 1) extends Analyzer {
+class LemmaAnalyzer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, guessUnknown: Boolean = true, maxEditDistance: Int = 0, depth: Int = 1, lowercase: Boolean = true) extends Analyzer {
 
   override def createComponents(fieldName: String): TokenStreamComponents = {
-    val tokenizer = new LemmaTokenizer(locale, originalWords, allLemmas, segmentBaseform, guessUnknown, segmentUnknown, maxEditDistance, depth)
-    return new TokenStreamComponents(tokenizer, tokenizer.tokenStream)
+    val tokenizer = new LemmaTokenizer(locale, originalWords, allLemmas, guessUnknown, maxEditDistance, depth)
+    new TokenStreamComponents(tokenizer, if (lowercase) new LowerCaseFilter(tokenizer.tokenStream) else tokenizer.tokenStream)
   }
 
 }
@@ -116,7 +103,7 @@ object LemmaAnalyzer {
     val wordsToAnalysis = new ArrayBuffer[(Int, String, Iterable[String])] 
     var offset = 0
     for (word <- analysis.asScala)
-      if (word.getAnalysis.get(0).getGlobalTags().containsKey("WHITESPACE"))
+      if (word.getAnalysis.get(0).getGlobalTags.containsKey("WHITESPACE"))
         offset += word.getWord.length
       else {
         val analyses = new ArrayBuffer[String]
