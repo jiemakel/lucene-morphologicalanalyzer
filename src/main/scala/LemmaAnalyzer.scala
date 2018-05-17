@@ -2,12 +2,11 @@ package fi.seco.lucene
 
 import java.util.{Collections, Locale}
 
-import fi.seco.lexical.combined.CombinedLexicalAnalysisService
 import fi.seco.lexical.hfst.HFSTLexicalAnalysisService.WordToResults
 import org.apache.lucene.analysis.Analyzer.TokenStreamComponents
-import org.apache.lucene.analysis.{Analyzer, TokenStream, Tokenizer}
 import org.apache.lucene.analysis.core.LowerCaseFilter
 import org.apache.lucene.analysis.tokenattributes.{CharTermAttribute, OffsetAttribute, PositionIncrementAttribute}
+import org.apache.lucene.analysis.{Analyzer, TokenStream, Tokenizer}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -53,8 +52,7 @@ class LemmaAnalysisTokenStream(var tokens: Iterable[(Int, String, Iterable[Strin
 class LemmaTokenizer(locale: Locale, originalWords: Boolean = true, allLemmas: Boolean = false, guessUnknown: Boolean = true, maxEditDistance: Int = 0, depth: Int = 1) extends Tokenizer {
   
   import LemmaAnalyzer._
-  
-  val analyzer = new CombinedLexicalAnalysisService()
+  import MorphologicalAnalyzer.analyzer
   
   val tokenStream = new LemmaAnalysisTokenStream() {
     override def reset(): Unit = {
@@ -92,7 +90,9 @@ class LemmaAnalyzer(locale: Locale, originalWords: Boolean = true, allLemmas: Bo
 
   override def createComponents(fieldName: String): TokenStreamComponents = {
     val tokenizer = new LemmaTokenizer(locale, originalWords, allLemmas, guessUnknown, maxEditDistance, depth)
-    new TokenStreamComponents(tokenizer, if (lowercase) new LowerCaseFilter(tokenizer.tokenStream) else tokenizer.tokenStream)
+    var tokenStream: TokenStream = tokenizer.tokenStream
+    if (lowercase) tokenStream = new LowerCaseFilter(tokenStream)
+    new TokenStreamComponents(tokenizer, tokenStream)
   }
 
 }

@@ -94,8 +94,6 @@ class MorphologicalTokenizer(locale: Locale, inflections: java.util.List[String]
   
   import MorphologicalAnalyzer._
   
-  val analyzer = new CombinedLexicalAnalysisService()
-  
   val tokenStream = new MorphologicalAnalysisTokenStream() {
     override def reset(): Unit = {
       MorphologicalTokenizer.this.reset()
@@ -153,6 +151,8 @@ case class WordPart(
 )
 
 object MorphologicalAnalyzer {
+  lazy val analyzer = new CombinedLexicalAnalysisService()
+
   def filterGlobalTag(tag: String): Boolean = tag match {
     case "WHITESPACE" => true
     case "POS_MATCH" => true
