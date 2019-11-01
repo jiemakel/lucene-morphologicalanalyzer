@@ -4,9 +4,9 @@ organization := "fi.seco"
 
 version := "1.2.1"
 
-scalaVersion := "2.12.8"
+scalaVersion := "2.13.1"
 
-crossScalaVersions := Seq("2.11.12")
+crossScalaVersions := Seq("2.11.12","2.12.10")
 
 resolvers ++= Seq(
     Resolver.mavenLocal
